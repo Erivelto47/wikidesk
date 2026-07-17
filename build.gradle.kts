@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.erivelto.wikidesk"
-version = "1.0.1"
+version = "1.0.2"
 
 repositories {
     google()
@@ -92,9 +92,14 @@ compose.desktop {
 
             macOS {
                 bundleID = "dev.erivelto.wikidesk"
+                iconFile.set(project.file("src/main/resources/icons/wikidesk-icon.icns"))
+            }
+            windows {
+                iconFile.set(project.file("src/main/resources/icons/wikidesk-icon.ico"))
             }
             linux {
                 packageName = "wikidesk"
+                iconFile.set(project.file("src/main/resources/icons/wikidesk-icon-linux.png"))
             }
         }
     }

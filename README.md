@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/wikidesk-icon.png" alt="WikiDesk" width="112">
+</p>
+
 # WikiDesk
 
 Leitor de documentação Markdown para desktop. Aponte para qualquer pasta com arquivos `.md` — uma wiki local, um repositório clonado, um vault — e leia com navegação, busca e diagramas renderizados. Offline, sem servidor, sem conta.
