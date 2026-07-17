@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.erivelto.wikidesk"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     google()
@@ -53,11 +53,10 @@ dependencies {
 }
 
 kotlin {
-    // Alinhado ao JDK 25 já instalado na máquina de desenvolvimento, em vez de
-    // exigir um JDK 17 separado. Compose Multiplatform Desktop suporta JDK 11+
-    // para rodar e JDK 17+ para empacotar distribuições nativas via jpackage,
-    // então 25 atende os dois casos.
-    jvmToolchain(25)
+    // Mantido em 21 para alinhar o bytecode compilado ao runtime empacotado
+    // pelo jpackage/GitHub Actions. Usar um toolchain mais novo aqui gera
+    // classes que o runtime nativo não consegue carregar ao abrir o app.
+    jvmToolchain(21)
 }
 
 compose.desktop {

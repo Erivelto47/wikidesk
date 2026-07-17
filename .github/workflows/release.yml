@@ -1,8 +1,8 @@
 # Gera os instaladores nativos (macOS, Windows e Linux) e publica na Release.
 #
 # Como usar: crie e envie uma tag de versão —
-#   git tag v1.0.0
-#   git push origin v1.0.0
+#   git tag vX.Y.Z
+#   git push origin vX.Y.Z
 # Cada job builda no seu próprio SO (instaladores nativos não podem ser
 # gerados em cross-compile) e anexa o artefato na Release da tag.
 name: Release
@@ -34,8 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Qualquer JDK 17+ serve para o launcher do Gradle; o toolchain 25
-      # exigido pelo build é baixado automaticamente (foojay resolver).
+      # O build compila e empacota com JDK 21 para manter o bytecode compatível
+      # com o runtime incluído nos instaladores nativos.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
