@@ -1,9 +1,10 @@
-# Gera o instalador nativo e publica como Release do GitHub.
+# Gera os instaladores nativos (macOS, Windows e Linux) e publica na Release.
 #
 # Como usar: crie e envie uma tag de versão —
 #   git tag v1.0.0
 #   git push origin v1.0.0
-# O workflow builda o .dmg (macOS) e anexa na Release criada para a tag.
+# Cada job builda no seu próprio SO (instaladores nativos não podem ser
+# gerados em cross-compile) e anexa o artefato na Release da tag.
 name: Release
 
 on:
@@ -15,8 +16,21 @@ permissions:
   contents: write
 
 jobs:
-  build-macos:
-    runs-on: macos-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            task: packageDmg
+            artifact: build/compose/binaries/main/dmg/*.dmg
+          - os: windows-latest
+            task: packageMsi
+            artifact: build/compose/binaries/main/msi/*.msi
+          - os: ubuntu-latest
+            task: packageDeb
+            artifact: build/compose/binaries/main/deb/*.deb
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,12 +45,14 @@ jobs:
 
       - name: Testes
         run: ./gradlew build --console=plain
+        shell: bash
 
-      - name: Empacotar .dmg
-        run: ./gradlew packageDmg --console=plain
+      - name: Empacotar instalador
+        run: ./gradlew ${{ matrix.task }} --console=plain
+        shell: bash
 
-      - name: Publicar Release
+      - name: Publicar na Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/compose/binaries/main/dmg/*.dmg
+          files: ${{ matrix.artifact }}
           generate_release_notes: true

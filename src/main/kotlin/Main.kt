@@ -16,7 +16,7 @@ import wikidesk.ui.app.AppRoot
 import wikidesk.ui.app.AppState
 
 /**
- * Ponto de entrada do aplicativo desktop (macOS e Linux).
+ * Ponto de entrada do aplicativo desktop (macOS, Windows e Linux).
  *
  * Os atalhos globais (⌘K / Ctrl+K para busca, Esc para fechar a busca) são
  * tratados aqui, no nível da janela, porque é o único lugar com acesso a

@@ -22,9 +22,9 @@ Leitor de documentação Markdown para desktop. Aponte para qualquer pasta com a
 
 ## Download
 
-Baixe o instalador mais recente na página de [Releases](../../releases) — `.dmg` para macOS. A cada tag `v*` o binário é gerado e publicado automaticamente.
+Baixe o instalador mais recente na página de [Releases](https://github.com/Erivelto47/wikidesk/releases): `.dmg` (macOS), `.msi` (Windows) ou `.deb` (Linux). A cada tag `v*` os três binários são gerados e publicados automaticamente.
 
-> **Nota (macOS):** o app não é assinado/notarizado. Na primeira abertura, clique com o botão direito no app → **Abrir**, ou libere em Ajustes → Privacidade e Segurança.
+> **Nota:** o app não é assinado. No macOS, clique com o botão direito → **Abrir** na primeira vez (ou libere em Ajustes → Privacidade e Segurança); no Windows, clique em "Mais informações" → "Executar assim mesmo" no SmartScreen.
 >
 > Na primeira vez que um diagrama Mermaid for exibido, o app baixa o motor de renderização (~100 MB, uma única vez).
 
@@ -33,7 +33,7 @@ Baixe o instalador mais recente na página de [Releases](../../releases) — `.d
 Requisitos: JDK 17+ no PATH (o build baixa o toolchain correto automaticamente).
 
 ```bash
-git clone https://github.com/erivelto02/wikidesk.git
+git clone https://github.com/Erivelto47/wikidesk.git
 cd wikidesk
 ./gradlew run
 ```
@@ -43,8 +43,9 @@ Ao rodar pela raiz do projeto, a wiki de exemplo `test-wiki/` abre automaticamen
 Para gerar o instalador nativo localmente:
 
 ```bash
-./gradlew packageDmg   # macOS  → build/compose/binaries/main/dmg/
-./gradlew packageDeb   # Linux  → build/compose/binaries/main/deb/
+./gradlew packageDmg   # macOS   → build/compose/binaries/main/dmg/
+./gradlew packageMsi   # Windows → build/compose/binaries/main/msi/
+./gradlew packageDeb   # Linux   → build/compose/binaries/main/deb/
 ```
 
 ## Stack

@@ -85,7 +85,7 @@ compose.desktop {
         }
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.Pkg)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "WikiDesk"
             packageVersion = project.version.toString()
             description = "Visualizador de documentação Markdown local"
