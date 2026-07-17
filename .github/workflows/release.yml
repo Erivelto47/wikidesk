@@ -1,0 +1,42 @@
+# Gera o instalador nativo e publica como Release do GitHub.
+#
+# Como usar: crie e envie uma tag de versão —
+#   git tag v1.0.0
+#   git push origin v1.0.0
+# O workflow builda o .dmg (macOS) e anexa na Release criada para a tag.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Qualquer JDK 17+ serve para o launcher do Gradle; o toolchain 25
+      # exigido pelo build é baixado automaticamente (foojay resolver).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Testes
+        run: ./gradlew build --console=plain
+
+      - name: Empacotar .dmg
+        run: ./gradlew packageDmg --console=plain
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/compose/binaries/main/dmg/*.dmg
+          generate_release_notes: true
