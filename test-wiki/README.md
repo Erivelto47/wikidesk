@@ -69,6 +69,28 @@ fun ola(nome: String): String {
 - [ ] Tarefa ainda não feita
 - [x] Tarefa concluída
 
+## HTML embutido
+
+Documentação real mistura HTML no Markdown — o WikiDesk converte o que tem
+equivalente (links, ênfase, imagens, listas) e descarta o resto das tags,
+mantendo o texto legível:
+
+<div class="text-center">
+  <a href="guias/comecando.md" class="btn btn-primary" role="button">Getting Started</a>
+</div>
+
+<div class="row"><div class="card">
+<h3 class="card-title">Um card Bootstrap</h3>
+<p class="card-text">Com <strong>negrito</strong>, <em>itálico</em>, <code>código</code>
+e uma quebra<br>de linha. A tag <code>&lt;div&gt;</code> em si é descartada.</p>
+</div></div>
+
+Dentro de código a marcação é preservada: `<br>` e o bloco abaixo ficam intactos.
+
+```html
+<div class="card">isto é conteúdo, não marcação</div>
+```
+
 ## Citação
 
 > Esta é uma citação de exemplo, só para checar o estilo do bloco de quote —

@@ -47,7 +47,9 @@ object MarkdownParser {
     private val calloutMkdocsRegex = Regex("^!!!\\s*(\\S+)\\s*(?:\"([^\"]*)\")?\\s*$")
 
     fun parse(rawText: String): Result {
-        val lines = rawText.replace("\r\n", "\n").split("\n")
+        // HTML embutido é normalizado para Markdown (ou descartado) antes do
+        // parse de blocos — ver [HtmlMarkdown].
+        val lines = HtmlMarkdown.normalize(rawText).replace("\r\n", "\n").split("\n")
         val blocks = mutableListOf<MarkdownBlock>()
         val headings = mutableListOf<DocumentHeading>()
         var title: String? = null

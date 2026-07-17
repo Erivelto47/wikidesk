@@ -40,6 +40,7 @@ import com.multiplatform.webview.web.rememberWebViewNavigator
 import com.multiplatform.webview.web.rememberWebViewStateWithHTMLData
 import wikidesk.domain.MarkdownBlock
 import wikidesk.platform.pickSaveFile
+import wikidesk.ui.LocalOverlayVisible
 import wikidesk.ui.components.CodeBlock
 import wikidesk.ui.theme.AppTypography
 import wikidesk.ui.theme.LocalAppColors
@@ -253,13 +254,18 @@ fun MermaidBlockView(block: MarkdownBlock.Mermaid, modifier: Modifier = Modifier
             // render não re-executa sozinho, pois o LaunchedEffect é
             // chaveado pelo código do bloco, que não mudou).
             if (runtimeState is MermaidRuntimeState.Ready) {
+                // O WebView também se recolhe enquanto um overlay (busca,
+                // modal "Adicionar fonte") está aberto: por ser um componente
+                // AWT, ele seria desenhado POR CIMA do overlay — não há
+                // z-index do lado Compose que impeça isso.
+                val overlayVisible = LocalOverlayVisible.current
                 WebView(
                     state = webViewState,
                     navigator = navigator,
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (!showSource && successResult != null) {
+                            if (!showSource && successResult != null && !overlayVisible) {
                                 Modifier.fillMaxHeight()
                             } else {
                                 Modifier.height(0.dp)

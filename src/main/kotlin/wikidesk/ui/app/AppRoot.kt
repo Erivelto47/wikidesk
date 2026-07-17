@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -41,6 +42,7 @@ import wikidesk.git.GitFileChangeKind
 import wikidesk.git.GitSourceStatus
 import wikidesk.git.formatRelativeTime
 import wikidesk.platform.pickWorkspaceDirectory
+import wikidesk.ui.LocalOverlayVisible
 import wikidesk.ui.components.AddSourceModal
 import wikidesk.ui.components.DocumentContent
 import wikidesk.ui.components.FileUiItem
@@ -91,6 +93,12 @@ fun AppRoot(state: AppState = remember { AppState() }) {
     AppTheme(darkTheme = state.isDarkTheme) {
         val colors = LocalAppColors.current
 
+        // Sinaliza aos WebViews de diagramas Mermaid que um overlay está
+        // aberto — eles precisam se recolher para não serem desenhados por
+        // cima do modal/busca (ver [wikidesk.ui.LocalOverlayVisible]).
+        CompositionLocalProvider(
+            LocalOverlayVisible provides (state.searchOpen || state.addSourceOpen)
+        ) {
         Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
             when {
                 state.sources.isEmpty() && !startupScanDone -> {
@@ -112,6 +120,7 @@ fun AppRoot(state: AppState = remember { AppState() }) {
                     MainShell(state = state)
                 }
             }
+        }
         }
     }
 }
