@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WikiDesk - leitor de documentação Markdown para desktop</title>
+  <meta
+    name="description"
+    content="WikiDesk e um leitor de documentacao Markdown para desktop com busca, fontes locais ou Git, diagramas Mermaid, sumario sincronizado e temas claro/escuro."
+  >
+  <meta name="theme-color" content="#5E6AD2">
+  <meta property="og:title" content="WikiDesk">
+  <meta property="og:description" content="Leia wikis Markdown locais ou de repositorios Git em um app desktop rapido, offline e sem conta.">
+  <meta property="og:image" content="https://erivelto47.github.io/wikidesk/screenshots/tela-principal.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23f2f2f4"/><rect x="10" y="10" width="44" height="44" rx="10" fill="%23eceafc" stroke="%23d5d5db"/><path d="M18 21h7l3 18 4-18h6l4 18 3-18h7l-6 26h-8l-3-15-3 15h-8z" fill="%235e6ad2"/></svg>'>
+  <style>
+    :root {
+      --background: #ffffff;
+      --sidebar: #f7f7f8;
+      --panel: #fafafa;
+      --chrome: #f2f2f4;
+      --text: #1c1c1f;
+      --body: #2c2c31;
+      --muted: #6b6b74;
+      --faint: #9c9ca4;
+      --border-soft: #ededf0;
+      --border: #e6e6ea;
+      --border-strong: #d5d5db;
+      --accent: #5e6ad2;
+      --accent-strong: #4653c8;
+      --accent-soft: #eceafc;
+      --note: #e8f0fe;
+      --note-accent: #3568d4;
+      --success: #e1f5e7;
+      --success-accent: #1e8a4c;
+      --warning: #fbefd9;
+      --warning-accent: #92660a;
+      --danger: #fce8e6;
+      --danger-accent: #c23b2e;
+      --shadow: 0 18px 50px rgba(24, 25, 31, 0.12);
+      --radius: 8px;
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(237, 237, 240, 0.82);
+      background: rgba(255, 255, 255, 0.86);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav {
+      width: min(1180px, calc(100% - 32px));
+      min-height: 64px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 780;
+      color: var(--text);
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--chrome);
+      color: var(--accent);
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .nav-links a {
+      padding: 8px 10px;
+      border-radius: 7px;
+    }
+
+    .nav-links a:hover {
+      background: var(--chrome);
+      color: var(--text);
+    }
+
+    .hero {
+      min-height: 92vh;
+      padding: 104px 0 58px;
+      position: relative;
+      isolation: isolate;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border-soft);
+      background: #111217;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background-image: url("screenshots/tela-principal.png");
+      background-position: center top;
+      background-size: cover;
+      transform: scale(1.03);
+      filter: saturate(0.92);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background:
+        linear-gradient(90deg, rgba(17, 18, 23, 0.90) 0%, rgba(17, 18, 23, 0.72) 43%, rgba(17, 18, 23, 0.20) 100%),
+        linear-gradient(0deg, rgba(17, 18, 23, 0.84) 0%, rgba(17, 18, 23, 0.12) 42%, rgba(17, 18, 23, 0.54) 100%);
+    }
+
+    .hero-inner {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      color: #ffffff;
+    }
+
+    .kicker {
+      margin: 0 0 14px;
+      color: #cfd3ff;
+      font-size: 13px;
+      font-weight: 780;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-size: clamp(44px, 8vw, 88px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 720px;
+      margin: 22px 0 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: clamp(18px, 2vw, 23px);
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 10px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 760;
+      white-space: nowrap;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.32);
+    }
+
+    .button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      box-shadow: 0 12px 28px rgba(94, 106, 210, 0.35);
+    }
+
+    .button.primary:hover {
+      background: #6f7af0;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 28px;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 5px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    section {
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .section-inner {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 72px 0;
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 0.82fr) minmax(280px, 0.48fr);
+      gap: 44px;
+      align-items: end;
+      margin-bottom: 32px;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(30px, 4.4vw, 52px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .download-card,
+    .feature-card,
+    .tour-card,
+    .note-card,
+    .step-card {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .download-card {
+      min-height: 232px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .platform {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .platform h3,
+    .feature-card h3,
+    .tour-card h3,
+    .step-card h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 19px;
+      line-height: 1.25;
+    }
+
+    .platform-badge {
+      min-width: 44px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .download-card p,
+    .feature-card p,
+    .tour-card p,
+    .note-card p,
+    .step-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .download-link {
+      margin-top: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--background);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 760;
+    }
+
+    .download-link:hover {
+      border-color: var(--accent);
+      color: var(--accent-strong);
+    }
+
+    .download-link.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .download-link.primary:hover {
+      background: var(--accent-strong);
+      color: #ffffff;
+    }
+
+    .note-strip {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .note-card {
+      padding: 18px;
+    }
+
+    .note-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .note-card.security {
+      border-color: #efd7d2;
+      background: var(--danger);
+    }
+
+    .note-card.runtime {
+      border-color: #ead8b6;
+      background: var(--warning);
+    }
+
+    .tour {
+      background: var(--sidebar);
+    }
+
+    .tour-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .tour-card {
+      overflow: hidden;
+      background: var(--background);
+    }
+
+    .tour-card.featured {
+      grid-column: 1 / -1;
+    }
+
+    .tour-card img {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      border-bottom: 1px solid var(--border);
+      background: var(--chrome);
+    }
+
+    .tour-card.git-card {
+      display: grid;
+      grid-template-columns: minmax(200px, 0.58fr) 1fr;
+      align-items: stretch;
+    }
+
+    .tour-card.git-card img {
+      height: 100%;
+      min-height: 420px;
+      aspect-ratio: auto;
+      border-bottom: 0;
+      border-right: 1px solid var(--border);
+      object-position: top;
+    }
+
+    .tour-body {
+      padding: 20px;
+    }
+
+    .tour-body p {
+      margin-top: 8px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .feature-card {
+      min-height: 194px;
+      padding: 20px;
+    }
+
+    .feature-icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      background: var(--note);
+      color: var(--note-accent);
+      font-weight: 850;
+    }
+
+    .feature-card:nth-child(2) .feature-icon,
+    .feature-card:nth-child(5) .feature-icon {
+      background: var(--success);
+      color: var(--success-accent);
+    }
+
+    .feature-card:nth-child(3) .feature-icon,
+    .feature-card:nth-child(6) .feature-icon {
+      background: var(--warning);
+      color: var(--warning-accent);
+    }
+
+    .tech {
+      background: var(--text);
+      color: #ffffff;
+    }
+
+    .tech h2 {
+      color: #ffffff;
+    }
+
+    .tech .lead {
+      color: rgba(255, 255, 255, 0.68);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .step-card {
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .step-card h3 {
+      color: #ffffff;
+    }
+
+    .step-card p {
+      color: rgba(255, 255, 255, 0.68);
+      margin-top: 8px;
+    }
+
+    .code-line {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      margin-top: 14px;
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: #161719;
+      color: #d3d3d8;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .footer {
+      background: var(--chrome);
+    }
+
+    .footer-inner {
+      width: min(1180px, calc(100% - 32px));
+      min-height: 92px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-weight: 680;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent-strong);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #1b1c1f;
+        --sidebar: #212226;
+        --panel: #1f2023;
+        --chrome: #1a1b1e;
+        --text: #e5e5e8;
+        --body: #d3d3d8;
+        --muted: #9a9aa2;
+        --faint: #6f6f78;
+        --border-soft: #26272a;
+        --border: #2f3033;
+        --border-strong: #3a3b3f;
+        --accent: #7b86f2;
+        --accent-strong: #a3abff;
+        --accent-soft: #2a2a3c;
+        --note: #1d2a3f;
+        --note-accent: #7ca6f2;
+        --success: #16301f;
+        --success-accent: #6fd897;
+        --warning: #3a2e15;
+        --warning-accent: #e0b45a;
+        --danger: #3a1917;
+        --danger-accent: #e58579;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+        color-scheme: dark;
+      }
+
+      .site-header {
+        border-bottom-color: rgba(47, 48, 51, 0.88);
+        background: rgba(27, 28, 31, 0.86);
+      }
+
+      .note-card.security {
+        border-color: #5a2824;
+      }
+
+      .note-card.runtime {
+        border-color: #57441e;
+      }
+    }
+
+    @media (max-width: 920px) {
+      .nav {
+        min-height: 58px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero {
+        min-height: 86vh;
+        padding-top: 92px;
+      }
+
+      .section-heading,
+      .download-grid,
+      .feature-grid,
+      .steps,
+      .note-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .tour-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tour-card.git-card {
+        display: block;
+      }
+
+      .tour-card.git-card img {
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        max-height: 520px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    @media (max-width: 620px) {
+      .hero {
+        min-height: 90vh;
+        padding-bottom: 40px;
+      }
+
+      .hero::before {
+        background-position: 46% top;
+      }
+
+      .hero::after {
+        background:
+          linear-gradient(90deg, rgba(17, 18, 23, 0.92) 0%, rgba(17, 18, 23, 0.78) 100%),
+          linear-gradient(0deg, rgba(17, 18, 23, 0.85) 0%, rgba(17, 18, 23, 0.18) 52%, rgba(17, 18, 23, 0.58) 100%);
+      }
+
+      .button,
+      .download-link {
+        width: 100%;
+      }
+
+      .section-inner {
+        padding: 52px 0;
+      }
+
+      .footer-inner {
+        padding: 22px 0;
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header" aria-label="Navegacao principal">
+    <nav class="nav">
+      <a class="brand" href="#inicio" aria-label="WikiDesk">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span>WikiDesk</span>
+      </a>
+      <div class="nav-links" aria-label="Secoes">
+        <a href="#download">Download</a>
+        <a href="#tour">Tour</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#codigo">Código</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="inicio">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-inner">
+        <p class="kicker">Markdown local, Git e Mermaid no desktop</p>
+        <h1 id="hero-title">WikiDesk</h1>
+        <p class="hero-copy">
+          Um leitor de documentação para abrir wikis Markdown, repositórios clonados e vaults locais
+          com navegação, busca global, sumário sincronizado e diagramas renderizados.
+        </p>
+        <div class="actions" aria-label="Acoes principais">
+          <a class="button primary" href="#download">Baixar instalador</a>
+          <a class="button" href="https://github.com/Erivelto47/wikidesk" rel="noopener">Ver no GitHub</a>
+        </div>
+        <div class="hero-meta" aria-label="Resumo">
+          <span class="pill">macOS, Windows e Linux</span>
+          <span class="pill">Offline depois de abrir a fonte</span>
+          <span class="pill">Sem servidor e sem conta</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" aria-labelledby="download-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <h2 id="download-title">Baixe a versão 1.0.0</h2>
+          <p class="lead">
+            Escolha o instalador do seu sistema. Todos os arquivos são gerados automaticamente
+            pela Release oficial do projeto no GitHub.
+          </p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-card">
+            <div class="platform">
+              <h3>macOS</h3>
+              <span class="platform-badge">DMG</span>
+            </div>
+            <p>Instalador para computadores Mac. Na primeira abertura, talvez seja necessário liberar o app nos ajustes de segurança.</p>
+            <a class="download-link primary" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.0.0/WikiDesk-1.0.0.dmg">Baixar .dmg</a>
+          </article>
+
+          <article class="download-card">
+            <div class="platform">
+              <h3>Windows</h3>
+              <span class="platform-badge">MSI</span>
+            </div>
+            <p>Pacote de instalação para Windows. Caso o SmartScreen apareça, use a opção de mais informações para continuar.</p>
+            <a class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.0.0/WikiDesk-1.0.0.msi">Baixar .msi</a>
+          </article>
+
+          <article class="download-card">
+            <div class="platform">
+              <h3>Linux</h3>
+              <span class="platform-badge">DEB</span>
+            </div>
+            <p>Pacote Debian/Ubuntu para ambientes Linux compatíveis com arquivos <code>.deb</code>.</p>
+            <a class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.0.0/wikidesk_1.0.0_amd64.deb">Baixar .deb</a>
+          </article>
+        </div>
+
+        <div class="note-strip" aria-label="Observacoes">
+          <div class="note-card security">
+            <strong>App ainda não assinado</strong>
+            <p>O sistema pode pedir confirmação na primeira execução. Isso é esperado para esta versão inicial distribuída pelo GitHub.</p>
+          </div>
+          <div class="note-card runtime">
+            <strong>Motor Mermaid</strong>
+            <p>Na primeira vez que abrir um diagrama, o app baixa o runtime de renderização uma única vez.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tour" class="tour" aria-labelledby="tour-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <h2 id="tour-title">Documentação navegável, sem sair do desktop</h2>
+          <p class="lead">
+            O WikiDesk foi desenhado para leitura diária: estrutura de pastas à esquerda,
+            conteúdo no centro e contexto da página sempre visível à direita.
+          </p>
+        </div>
+
+        <div class="tour-grid">
+          <article class="tour-card featured">
+            <img src="screenshots/tela-principal.png" alt="Tela principal do WikiDesk com arvore de arquivos, documento Markdown e sumario lateral">
+            <div class="tour-body">
+              <h3>Abra qualquer pasta Markdown</h3>
+              <p>Use com wikis locais, documentação de projetos, vaults pessoais ou repositórios clonados.</p>
+            </div>
+          </article>
+
+          <article class="tour-card">
+            <img src="screenshots/mermaid.png" alt="Diagrama Mermaid renderizado dentro do WikiDesk">
+            <div class="tour-body">
+              <h3>Diagramas Mermaid reais</h3>
+              <p>Fluxos, sequências e outros diagramas são renderizados com Mermaid, com opções de zoom e exportação.</p>
+            </div>
+          </article>
+
+          <article class="tour-card">
+            <img src="screenshots/busca.png" alt="Paleta de busca global do WikiDesk">
+            <div class="tour-body">
+              <h3>Busca global rápida</h3>
+              <p>Encontre páginas pelo título ou conteúdo em todas as fontes abertas, sem indexador externo.</p>
+            </div>
+          </article>
+
+          <article class="tour-card">
+            <img src="screenshots/tema-escuro.png" alt="WikiDesk usando tema escuro">
+            <div class="tour-body">
+              <h3>Tema claro e escuro</h3>
+              <p>A interface acompanha o sistema e mantém a mesma hierarquia visual nos dois temas.</p>
+            </div>
+          </article>
+
+          <article class="tour-card git-card">
+            <img src="screenshots/git.png" alt="Painel lateral do WikiDesk mostrando status Git de uma fonte">
+            <div class="tour-body">
+              <h3>Status Git integrado</h3>
+              <p>Veja branch, último commit, diferença contra a origem e arquivos alterados quando a fonte é um repositório.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="recursos" aria-labelledby="features-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <h2 id="features-title">Feito para wikis que vivem junto do código</h2>
+          <p class="lead">
+            Sem servidor para manter, sem conta para criar e sem fluxo de publicação obrigatório.
+            A documentação continua onde ela já está.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">MD</div>
+            <h3>Markdown amplo</h3>
+            <p>Renderiza títulos, tabelas, listas, links relativos, imagens, blocos de código e HTML embutido.</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">Git</div>
+            <h3>Fontes locais ou remotas</h3>
+            <p>Abra pastas do disco ou clone repositórios via HTTPS com token ou SSH.</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">TOC</div>
+            <h3>Sumário com scroll-sync</h3>
+            <p>O índice da página acompanha a leitura e permite saltar entre seções rapidamente.</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">K</div>
+            <h3>Busca por teclado</h3>
+            <p>A paleta global usa atalhos familiares: <code>Ctrl+K</code> no Windows/Linux e <code>Cmd+K</code> no macOS.</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">!</div>
+            <h3>Callouts compatíveis</h3>
+            <p>Suporta anotações no estilo GitHub e MkDocs para destacar notas, avisos e exemplos.</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">UI</div>
+            <h3>Interface de leitura</h3>
+            <p>Abas, histórico de navegação e painéis persistentes deixam a consulta mais parecida com um navegador de docs.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="codigo" class="tech" aria-labelledby="code-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <h2 id="code-title">Aberto, local e simples de rodar</h2>
+          <p class="lead">
+            O projeto é MIT e usa Kotlin com Compose Multiplatform Desktop, JGit e KCEF para renderizar Mermaid.
+          </p>
+        </div>
+
+        <div class="steps">
+          <article class="step-card">
+            <h3>Clone o repositório</h3>
+            <code class="code-line">git clone https://github.com/Erivelto47/wikidesk.git</code>
+          </article>
+
+          <article class="step-card">
+            <h3>Rode em modo desenvolvimento</h3>
+            <code class="code-line">cd wikidesk<br>./gradlew run</code>
+          </article>
+
+          <article class="step-card">
+            <h3>Gere instaladores</h3>
+            <code class="code-line">./gradlew packageDmg<br>./gradlew packageMsi<br>./gradlew packageDeb</code>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>WikiDesk 1.0.0 - MIT License</span>
+      <div class="footer-links">
+        <a href="https://github.com/Erivelto47/wikidesk" rel="noopener">GitHub</a>
+        <a href="https://github.com/Erivelto47/wikidesk/releases/tag/v1.0.0" rel="noopener">Release v1.0.0</a>
+        <a href="https://github.com/Erivelto47/wikidesk/issues" rel="noopener">Issues</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
