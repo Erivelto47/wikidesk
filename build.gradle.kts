@@ -67,6 +67,18 @@ dependencies {
     // duas versões do driver JDBC coexistindo no classpath.
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
 
+    // EXPERIMENTAL (branch experiment/native-file-chooser): seletor de
+    // arquivo/pasta usando o diálogo nativo do SO (SystemFileChooser) em vez
+    // do JFileChooser puro do Swing — ver wikidesk.platform.DesktopFileChooser.
+    // Motivo: JFileChooser sob o look-and-feel GTK do Linux tem um bug antigo
+    // e documentado (JDK-5073778) onde selecionar uma pasta duplica o último
+    // segmento do caminho (ex.: "solid/solid"). SystemFileChooser chama a API
+    // nativa de verdade (NSOpenPanel no macOS, diálogo comum do Win32 no
+    // Windows, GTK 3 real no Linux via binding nativo) em vez do Swing
+    // repintando um tema — evita essa classe de bug por completo. Cai de
+    // volta pro JFileChooser sozinho se o GTK 3 não estiver presente.
+    implementation("com.formdev:flatlaf:3.7.1")
+
     testImplementation(kotlin("test"))
 }
 
