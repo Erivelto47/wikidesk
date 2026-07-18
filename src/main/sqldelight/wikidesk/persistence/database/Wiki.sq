@@ -1,0 +1,77 @@
+-- Wikis registradas por esta instalação: pasta local ou repositório Git clonado.
+-- Não existe conceito de usuário/conta — cada instalação é um único ambiente
+-- local, então esta tabela é, na prática, "todas as wikis que este WikiDesk
+-- já conheceu".
+--
+-- Colunas em camelCase (não snake_case): o SQLDelight gera propriedades
+-- Kotlin com o nome exatamente igual ao da coluna SQL, sem conversão
+-- automática — usar camelCase aqui já deixa o código gerado (e o restante
+-- desta camada, que lê essas propriedades) consistente com o resto do
+-- projeto, que é 100% idiomático (ver `wikidesk.domain.Source.rootPath`, por
+-- exemplo).
+--
+-- `normalizedPath` guarda o caminho canonicalizado (symlinks resolvidos
+-- quando possível — ver `wikidesk.persistence.repository.
+-- SqlDelightWikiRepository`) e é o que garante que a mesma pasta não seja
+-- registrada duas vezes, mesmo que o usuário aponte para ela por caminhos
+-- textualmente diferentes. `rootPath` guarda o caminho "de exibição" (o que
+-- o usuário escolheu/vê).
+--
+-- `sourceType` e `isActive` são armazenados como valores simples (TEXT /
+-- INTEGER 0-1) em vez de tipos adaptados pelo SQLDelight: a conversão para
+-- wikidesk.persistence.model.WikiSourceType (e Boolean) acontece no mapper,
+-- mantendo esta camada de schema o mais simples e estável possível.
+CREATE TABLE wiki (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    rootPath TEXT NOT NULL,
+    normalizedPath TEXT NOT NULL,
+    sourceType TEXT NOT NULL,
+    remoteUrl TEXT,
+    defaultBranch TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    lastOpenedAt INTEGER,
+    isActive INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE UNIQUE INDEX wiki_normalized_path_idx ON wiki(normalizedPath);
+CREATE INDEX wiki_is_active_idx ON wiki(isActive);
+-- Adicionado na migração 1->2 (ver 1.sqm) — mantido aqui porque .sq sempre
+-- representa o schema mais recente (usado por Schema.create em bancos novos);
+-- o .sqm é só o "diff" aplicado a bancos já existentes na versão anterior.
+CREATE INDEX wiki_source_type_idx ON wiki(sourceType);
+
+selectActive:
+SELECT * FROM wiki WHERE isActive = 1 ORDER BY name COLLATE NOCASE;
+
+selectAll:
+SELECT * FROM wiki ORDER BY name COLLATE NOCASE;
+
+selectById:
+SELECT * FROM wiki WHERE id = :id;
+
+selectByNormalizedPath:
+SELECT * FROM wiki WHERE normalizedPath = :normalizedPath;
+
+insertWiki:
+INSERT INTO wiki (name, rootPath, normalizedPath, sourceType, remoteUrl, defaultBranch, createdAt, updatedAt, lastOpenedAt, isActive)
+VALUES (:name, :rootPath, :normalizedPath, :sourceType, :remoteUrl, :defaultBranch, :createdAt, :updatedAt, :lastOpenedAt, :isActive)
+RETURNING id;
+
+updateWiki:
+UPDATE wiki
+SET name = :name,
+    rootPath = :rootPath,
+    normalizedPath = :normalizedPath,
+    sourceType = :sourceType,
+    remoteUrl = :remoteUrl,
+    defaultBranch = :defaultBranch,
+    updatedAt = :updatedAt
+WHERE id = :id;
+
+markOpened:
+UPDATE wiki SET lastOpenedAt = :openedAt, updatedAt = :openedAt WHERE id = :id;
+
+setActive:
+UPDATE wiki SET isActive = :isActive, updatedAt = :updatedAt WHERE id = :id;

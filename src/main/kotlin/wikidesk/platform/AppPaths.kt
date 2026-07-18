@@ -5,16 +5,22 @@ import java.io.File
 /**
  * Diretório raiz de dados do aplicativo. Segue a convenção de cada SO:
  * `~/Library/Application Support/WikiDesk` no macOS,
- * `$XDG_DATA_HOME/WikiDesk` (ou `~/.local/share/WikiDesk`) no Linux.
+ * `$XDG_DATA_HOME/WikiDesk` (ou `~/.local/share/WikiDesk`) no Linux,
+ * `%APPDATA%/WikiDesk` no Windows.
+ *
+ * Não público antes da persistência local (ver `wikidesk.persistence.database.
+ * DatabasePathResolver`, que reaproveita esta função) precisar dele fora deste
+ * arquivo — antes disso só era usado internamente para clones Git e o cache
+ * do KCEF.
  */
-private fun appSupportDirectory(): File {
+fun appSupportDirectory(): File {
     val home = System.getProperty("user.home")
     val os = System.getProperty("os.name").orEmpty().lowercase()
 
-    return if (os.contains("mac")) {
-        File(home, "Library/Application Support/WikiDesk")
-    } else {
-        File(System.getenv("XDG_DATA_HOME") ?: "$home/.local/share", "WikiDesk")
+    return when {
+        os.contains("mac") -> File(home, "Library/Application Support/WikiDesk")
+        os.contains("win") -> File(System.getenv("APPDATA") ?: "$home/AppData/Roaming", "WikiDesk")
+        else -> File(System.getenv("XDG_DATA_HOME") ?: "$home/.local/share", "WikiDesk")
     }
 }
 

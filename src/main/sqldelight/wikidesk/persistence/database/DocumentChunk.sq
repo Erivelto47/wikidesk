@@ -1,0 +1,57 @@
+-- Pedaços de um documento, preparados para recursos futuros de IA (busca
+-- semântica por embeddings). Nenhuma geração de embedding acontece hoje —
+-- as colunas embedding* ficam NULL até que essa funcionalidade seja
+-- implementada; o objetivo aqui é só não exigir uma migração de schema
+-- quando isso acontecer.
+--
+-- `content` guarda o texto do pedaço (é o que a busca textual indexa,
+-- diretamente ou via FTS5 — ver wikidesk.persistence.search). A tabela
+-- `document` propositalmente não guarda o texto completo do arquivo.
+CREATE TABLE document_chunk (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    documentId INTEGER NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+    chunkIndex INTEGER NOT NULL,
+    headingPath TEXT,
+    content TEXT NOT NULL,
+    contentHash TEXT NOT NULL,
+    tokenCount INTEGER,
+    embeddingModel TEXT,
+    embeddingDimension INTEGER,
+    embeddingBlob BLOB,
+    embeddedAt INTEGER
+);
+
+CREATE UNIQUE INDEX document_chunk_doc_index_idx ON document_chunk(documentId, chunkIndex);
+
+selectByDocument:
+SELECT * FROM document_chunk WHERE documentId = :documentId ORDER BY chunkIndex;
+
+deleteByDocument:
+DELETE FROM document_chunk WHERE documentId = :documentId;
+
+insertChunk:
+INSERT INTO document_chunk (documentId, chunkIndex, headingPath, content, contentHash, tokenCount, embeddingModel, embeddingDimension, embeddingBlob, embeddedAt)
+VALUES (:documentId, :chunkIndex, :headingPath, :content, :contentHash, :tokenCount, :embeddingModel, :embeddingDimension, :embeddingBlob, :embeddedAt);
+
+-- Usada para espelhar chunks recém-gravados no índice FTS5 (ou, quando ele
+-- não está disponível, é simplesmente ignorada — ver Fts5SearchIndex). Só os
+-- campos do próprio chunk: título/caminho do documento já ficam disponíveis
+-- para quem chama através de `document`, sem precisar de JOIN aqui.
+selectForFtsSync:
+SELECT id AS chunkId, chunkIndex, headingPath, content
+FROM document_chunk
+WHERE documentId = :documentId
+ORDER BY chunkIndex;
+
+-- Fallback de busca textual quando FTS5 não está disponível no driver/plataforma
+-- (ver wikidesk.persistence.search.RelationalLikeSearchIndex). :wikiId nulo
+-- busca em todas as wikis.
+searchFallback:
+SELECT document.id AS documentId, document.wikiId AS wikiId, document.relativePath AS relativePath, document.title AS title, document_chunk.content AS content
+FROM document_chunk
+JOIN document ON document.id = document_chunk.documentId
+WHERE document.deletedAt IS NULL
+  AND (:wikiId IS NULL OR document.wikiId = :wikiId)
+  AND (document.title LIKE :likeQuery ESCAPE '\' OR document_chunk.content LIKE :likeQuery ESCAPE '\' OR document.relativePath LIKE :likeQuery ESCAPE '\')
+ORDER BY document.title
+LIMIT :limitCount;

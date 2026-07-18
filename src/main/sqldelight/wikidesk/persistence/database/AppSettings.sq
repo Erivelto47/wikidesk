@@ -1,0 +1,30 @@
+-- Preferências do aplicativo em formato chave/valor. A camada tipada fica em
+-- wikidesk.persistence.repository.SettingsRepository — o restante do app
+-- nunca deveria montar/ler chaves aqui diretamente.
+--
+-- Ser chave/valor (em vez de colunas fixas) é o que permite tolerar chaves
+-- desconhecidas escritas por uma versão futura do app: linhas cuja chave a
+-- versão atual não reconhece são simplesmente ignoradas ao carregar, em vez
+-- de quebrar uma migração de schema.
+CREATE TABLE app_settings (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL,
+    updatedAt INTEGER NOT NULL
+);
+
+selectAll:
+SELECT * FROM app_settings;
+
+selectByKey:
+SELECT * FROM app_settings WHERE key = :key;
+
+upsert:
+INSERT INTO app_settings (key, value, updatedAt)
+VALUES (:key, :value, :updatedAt)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt;
+
+deleteByKey:
+DELETE FROM app_settings WHERE key = :key;
+
+deleteAll:
+DELETE FROM app_settings;

@@ -1,0 +1,67 @@
+-- Metadados de arquivos Markdown indexados de uma wiki. Deliberadamente NÃO
+-- guarda o conteúdo completo do documento (privacidade/tamanho do banco) —
+-- o conteúdo textual, quando necessário para busca, vive em document_chunk
+-- ou no índice FTS5 (ver wikidesk.persistence.search).
+--
+-- `contentHash` é o que permite detectar documentos alterados sem reler e
+-- reprocessar tudo a cada reindexação (comparação barata de hash).
+-- `deletedAt` é remoção lógica: um arquivo que sumiu do disco deixa de
+-- aparecer nas buscas, mas a linha (e o histórico de chunks) não é apagada
+-- imediatamente, para não perder trabalho de indexação à toa em caso de
+-- remoção temporária (ex.: pasta momentaneamente desmontada).
+CREATE TABLE document (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    wikiId INTEGER NOT NULL REFERENCES wiki(id) ON DELETE CASCADE,
+    relativePath TEXT NOT NULL,
+    title TEXT NOT NULL,
+    contentHash TEXT NOT NULL,
+    fileSize INTEGER NOT NULL,
+    modifiedAt INTEGER NOT NULL,
+    indexedAt INTEGER NOT NULL,
+    deletedAt INTEGER
+);
+
+CREATE UNIQUE INDEX document_wiki_path_idx ON document(wikiId, relativePath);
+CREATE INDEX document_wiki_id_idx ON document(wikiId);
+CREATE INDEX document_deleted_at_idx ON document(deletedAt);
+
+selectByWiki:
+SELECT * FROM document WHERE wikiId = :wikiId AND deletedAt IS NULL ORDER BY relativePath;
+
+selectAllByWikiIncludingDeleted:
+SELECT * FROM document WHERE wikiId = :wikiId;
+
+selectByWikiAndPath:
+SELECT * FROM document WHERE wikiId = :wikiId AND relativePath = :relativePath;
+
+selectById:
+SELECT * FROM document WHERE id = :id;
+
+selectHashesByWiki:
+SELECT relativePath, contentHash FROM document WHERE wikiId = :wikiId AND deletedAt IS NULL;
+
+selectNeedingReindex:
+SELECT * FROM document WHERE wikiId = :wikiId AND deletedAt IS NULL AND indexedAt < modifiedAt;
+
+insertOrUpdateDocument:
+INSERT INTO document (wikiId, relativePath, title, contentHash, fileSize, modifiedAt, indexedAt, deletedAt)
+VALUES (:wikiId, :relativePath, :title, :contentHash, :fileSize, :modifiedAt, :indexedAt, NULL)
+ON CONFLICT(wikiId, relativePath) DO UPDATE SET
+    title = excluded.title,
+    contentHash = excluded.contentHash,
+    fileSize = excluded.fileSize,
+    modifiedAt = excluded.modifiedAt,
+    indexedAt = excluded.indexedAt,
+    deletedAt = NULL;
+
+markDeletedExcept:
+UPDATE document SET deletedAt = :deletedAt WHERE wikiId = :wikiId AND deletedAt IS NULL AND relativePath NOT IN :keepPaths;
+
+markAllDeleted:
+UPDATE document SET deletedAt = :deletedAt WHERE wikiId = :wikiId AND deletedAt IS NULL;
+
+deleteByWiki:
+DELETE FROM document WHERE wikiId = :wikiId;
+
+countActiveByWiki:
+SELECT COUNT(*) FROM document WHERE wikiId = :wikiId AND deletedAt IS NULL;

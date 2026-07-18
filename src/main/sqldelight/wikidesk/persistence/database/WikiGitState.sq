@@ -1,0 +1,52 @@
+-- Snapshot/cache do último estado Git conhecido de uma wiki. O repositório
+-- Git real (via JGit, ver wikidesk.git.GitClient) continua sendo a fonte de
+-- verdade — esta tabela existe só para exibir algo instantaneamente na UI
+-- antes/sem precisar reabrir o repositório em disco.
+--
+-- Ausência de linha para uma wiki = estado nunca foi lido (desconhecido).
+-- Linha presente com hasLocalChanges/currentBranch/headCommit todos NULL =
+-- estado explicitamente invalidado (ver `invalidate`) — também desconhecido,
+-- mas distinto de "nunca lido": já existiu um snapshot que deixou de ser
+-- confiável. Linha presente com hasLocalChanges = 0 = repositório limpo no
+-- momento do último scan.
+CREATE TABLE wiki_git_state (
+    wikiId INTEGER NOT NULL PRIMARY KEY REFERENCES wiki(id) ON DELETE CASCADE,
+    currentBranch TEXT,
+    headCommit TEXT,
+    remoteHeadCommit TEXT,
+    hasLocalChanges INTEGER,
+    aheadCount INTEGER,
+    behindCount INTEGER,
+    lastFetchAt INTEGER,
+    lastScanAt INTEGER NOT NULL
+);
+
+selectByWikiId:
+SELECT * FROM wiki_git_state WHERE wikiId = :wikiId;
+
+upsert:
+INSERT INTO wiki_git_state (wikiId, currentBranch, headCommit, remoteHeadCommit, hasLocalChanges, aheadCount, behindCount, lastFetchAt, lastScanAt)
+VALUES (:wikiId, :currentBranch, :headCommit, :remoteHeadCommit, :hasLocalChanges, :aheadCount, :behindCount, :lastFetchAt, :lastScanAt)
+ON CONFLICT(wikiId) DO UPDATE SET
+    currentBranch = excluded.currentBranch,
+    headCommit = excluded.headCommit,
+    remoteHeadCommit = excluded.remoteHeadCommit,
+    hasLocalChanges = excluded.hasLocalChanges,
+    aheadCount = excluded.aheadCount,
+    behindCount = excluded.behindCount,
+    lastFetchAt = excluded.lastFetchAt,
+    lastScanAt = excluded.lastScanAt;
+
+invalidate:
+UPDATE wiki_git_state
+SET currentBranch = NULL,
+    headCommit = NULL,
+    remoteHeadCommit = NULL,
+    hasLocalChanges = NULL,
+    aheadCount = NULL,
+    behindCount = NULL,
+    lastScanAt = :invalidatedAt
+WHERE wikiId = :wikiId;
+
+deleteByWikiId:
+DELETE FROM wiki_git_state WHERE wikiId = :wikiId;

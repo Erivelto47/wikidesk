@@ -81,12 +81,12 @@ import kotlin.math.roundToInt
 fun AppRoot(state: AppState = remember { AppState() }) {
     var startupScanDone by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (state.sources.isEmpty() && state.sourceError == null) {
-            val devWiki = File("test-wiki")
-            if (devWiki.isDirectory) {
-                state.addLocalSource(devWiki.absolutePath)
-            }
-        }
+        // Carrega preferências, restaura as wikis registradas (verificando
+        // se cada caminho ainda existe) e foca a última wiki aberta — ver
+        // `AppState.bootstrap`. A conveniência de abrir `test-wiki/` em
+        // desenvolvimento continua existindo, só que agora como parte desse
+        // fluxo (só entra em ação se nenhuma wiki persistida existir).
+        state.bootstrap()
         startupScanDone = true
     }
 

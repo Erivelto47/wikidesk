@@ -1,0 +1,14 @@
+-- Migração v1 -> v2.
+--
+-- Este projeto começa a persistência já na v1 (schema inicial completo: wiki,
+-- wiki_git_state, app_settings, document, document_chunk). Este arquivo é o
+-- primeiro degrau do mecanismo de migração versionada em si — deliberadamente
+-- uma mudança pequena e segura (só um índice), para que o pipeline de
+-- migração (backup, aplicação, checagem de versão, tratamento de falha) já
+-- saia testado de ponta a ponta desde a primeira versão, em vez de só ser
+-- exercitado na primeira vez que o schema precisar mudar de verdade.
+--
+-- Precisa ficar equivalente ao que Wiki.sq já declara para uma instalação
+-- nova (Schema.create), já que .sq sempre reflete o schema mais recente —
+-- ver o comentário ao lado de wiki_source_type_idx em Wiki.sq.
+CREATE INDEX wiki_source_type_idx ON wiki(sourceType);

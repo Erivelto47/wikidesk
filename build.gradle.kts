@@ -4,10 +4,11 @@ plugins {
     kotlin("jvm") version "2.4.10"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.10"
     id("org.jetbrains.compose") version "1.11.1"
+    id("app.cash.sqldelight") version "2.1.0"
 }
 
 group = "dev.erivelto.wikidesk"
-version = "1.0.2"
+version = "1.1.0"
 
 repositories {
     google()
@@ -49,7 +50,40 @@ dependencies {
     // de pastas do bundle baixado — em `MermaidRuntime.repairOrCleanUpBundle`.
     implementation("io.github.kevinnzou:compose-webview-multiplatform:2.0.1")
 
+    // Persistência local (ver wikidesk.persistence): SQLite via SQLDelight, sem
+    // ORM baseado em reflexão — APIs tipadas geradas a partir de arquivos .sq.
+    // O driver JVM (sqlite-driver) embute o xerial sqlite-jdbc, cujo binário
+    // nativo é usado também para o índice de busca textual (FTS5, quando
+    // suportado) e para operações de manutenção (VACUUM INTO, integrity_check)
+    // via uma segunda conexão JDBC crua — ver wikidesk.persistence.database.
+    implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
+    implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
+    // sqlite-driver traz o xerial sqlite-jdbc só como dependência de runtime
+    // (não aparece no classpath de compilação dos módulos que o usam) — como
+    // DatabaseFactory.kt e Fts5SearchIndex.kt referenciam tipos dele
+    // diretamente (org.sqlite.SQLiteConfig, DriverManager/Connection), é
+    // preciso declarar explicitamente aqui. Versão travada na mesma que o
+    // sqlite-driver:2.1.0 já resolve transitivamente, para não haver risco de
+    // duas versões do driver JDBC coexistindo no classpath.
+    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
+
     testImplementation(kotlin("test"))
+}
+
+sqldelight {
+    databases {
+        create("WikiDeskDatabase") {
+            packageName.set("wikidesk.persistence.database")
+            // O dialeto padrão do plugin (sqlite-3-18) não entende
+            // `INSERT ... ON CONFLICT DO UPDATE` (upsert), usado em
+            // Wiki.sq/WikiGitState.sq/AppSettings.sq/Document.sq —
+            // esse dialeto só descreve o que o COMPILADOR do SQLDelight
+            // aceita ao gerar código; o SQLite real embutido no driver
+            // (xerial, via sqlite-driver) já suporta upsert há muito tempo,
+            // então isto não muda nada em runtime.
+            dialect("app.cash.sqldelight:sqlite-3-38-dialect:2.1.0")
+        }
+    }
 }
 
 kotlin {
@@ -89,6 +123,19 @@ compose.desktop {
             packageVersion = project.version.toString()
             description = "Visualizador de documentação Markdown local"
             copyright = "© 2026 Erivelto Muller"
+
+            // O runtime empacotado (jlink, via a task createRuntimeImage) só
+            // inclui os módulos do JDK que o jdeps consegue detectar
+            // automaticamente a partir dos jars — e ele não detecta o uso de
+            // java.sql.DriverManager feito diretamente em
+            // wikidesk.persistence.database.DatabaseFactory/Fts5SearchIndex
+            // (fora do SQLDelight, para PRAGMA/FTS5/manutenção). Sem isto, o
+            // app empacotado (.dmg/.msi/.deb) crasha ao abrir com
+            // `NoClassDefFoundError: java/sql/DriverManager` — só aparece no
+            // build empacotado, nunca em `./gradlew run` (que usa o JDK
+            // completo do sistema, não a imagem reduzida). java.logging é
+            // usado por PersistenceLog (java.util.logging.Logger).
+            modules("java.sql", "java.logging", "java.naming")
 
             macOS {
                 bundleID = "dev.erivelto.wikidesk"

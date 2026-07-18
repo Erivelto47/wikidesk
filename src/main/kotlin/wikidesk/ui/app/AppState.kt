@@ -17,15 +17,27 @@ import wikidesk.git.cloneDestinationInFolder
 import wikidesk.git.defaultCloneDestination
 import wikidesk.git.isGitRepository
 import wikidesk.git.readOriginUrl
+import wikidesk.persistence.PersistenceContainer
+import wikidesk.persistence.PersistenceLog
+import wikidesk.persistence.model.AppTheme
+import wikidesk.persistence.model.WikiGitState
+import wikidesk.persistence.model.WikiSourceType
 import wikidesk.platform.openExternalUrl
 import wikidesk.workspace.WorkspaceScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.URLDecoder
 import java.nio.file.Paths
+import kotlin.math.roundToInt
 
 /** Uma aba de documento aberta no shell principal. */
 data class TabState(val id: String, val label: String)
@@ -53,7 +65,49 @@ private data class GitRemoteInfo(
  * "Busca" da especificação, para que os componentes de UI permaneçam
  * "burros" (recebem estado e emitem eventos).
  */
-class AppState {
+class AppState(private val persistence: PersistenceContainer = PersistenceContainer.createOrFallback()) {
+
+    /**
+     * Escopo próprio para escritas de persistência que são efeito colateral
+     * de uma ação síncrona da UI (ex.: registrar a wiki depois de
+     * `addLocalSource` já ter atualizado a sidebar) e não têm um
+     * `CoroutineScope` de composable para se atrelar. Cancelado em [dispose].
+     */
+    private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Id da wiki no banco para cada fonte aberta nesta sessão — populado pelo registro/restauração (ver [bootstrap]). */
+    private val wikiIdsBySourceId = mutableMapOf<String, Long>()
+
+    /** Wikis registradas cujo caminho salvo não existe mais no disco (ver [bootstrap]) — metadados preservados, só não reabertas automaticamente. */
+    val unavailableWikiNames = mutableStateListOf<String>()
+
+    /**
+     * Libera os recursos da camada de persistência. Chamado uma única vez, ao
+     * fechar a janela (ver `Main.kt`).
+     *
+     * Antes de cancelar [persistenceScope] e fechar o banco, espera (com um
+     * timeout de segurança) qualquer escrita em segundo plano já em andamento
+     * — como o registro de uma wiki lançado por [persistWikiRegistration] logo
+     * após `addLocalSource`/`addGitSource`, ou a preferência de tema/sidebar.
+     * Sem isso, fechar a janela pouco depois de uma dessas ações
+     * (ex.: selecionar uma pasta e fechar o app em seguida, exatamente o
+     * cenário de "escolhi uma pasta e ao reabrir ela não estava lá") cancela o
+     * job e fecha a conexão antes do `INSERT`/`UPDATE` chegar a acontecer —
+     * a wiki nunca é gravada, mas nada na UI indica isso, porque o registro é
+     * deliberadamente "fire-and-forget" para não travar a sidebar.
+     */
+    fun dispose() {
+        runCatching {
+            runBlocking {
+                withTimeoutOrNull(5_000) {
+                    persistenceScope.coroutineContext[Job]?.children?.toList()?.forEach { it.join() }
+                }
+            }
+        }.onFailure { e -> PersistenceLog.warn("Falha ao aguardar escritas pendentes ao fechar", e) }
+
+        persistenceScope.cancel()
+        persistence.close()
+    }
 
     // --- Fontes (multi-workspace) e documentos -----------------------------
     val sources = mutableStateListOf<Source>()
@@ -83,13 +137,43 @@ class AppState {
             return
         }
 
-        val loaded = WorkspaceScanner.scanLocal(sourceId, absolutePath)
-        if (loaded == null) {
+        val source = openScannedLocalSource(sourceId, absolutePath)
+        if (source == null) {
             sourceError = "Não foi possível abrir esta pasta:\n$path"
             return
         }
 
         sourceError = null
+
+        if (activeTabId.isEmpty()) {
+            source.initialDocumentId?.let { activateTab(it) }
+        }
+
+        persistWikiRegistration(
+            sourceId = sourceId,
+            name = source.name,
+            rootPath = absolutePath,
+            // `LOCAL_FOLDER`, não `GIT_REPOSITORY`, mesmo quando a pasta já é
+            // um checkout Git: o que este campo registra é como a wiki foi
+            // adicionada ao WikiDesk (seletor de pasta vs. clone pela aba
+            // "Repositório Git" — ver `addGitSource`), que é exatamente o que
+            // decide o prefixo do id da fonte ("local:"/"git:") usado por
+            // toda a sessão — não se a pasta tem um `.git` dentro (isso já é
+            // capturado por `Source.type`/`gitStatuses`, algo ortogonal).
+            sourceType = WikiSourceType.LOCAL_FOLDER,
+            remoteUrl = gitRemotes[sourceId]?.remoteUrl?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    /**
+     * Faz o scan de [absolutePath] como fonte local (mesma lógica para uma
+     * pasta escolhida agora pelo usuário ou uma wiki persistida sendo
+     * reaberta no startup — ver [bootstrap]) e a adiciona a [sources]/
+     * [documentsMap]/[gitRemotes]/[gitStatuses]. Não mexe em persistência —
+     * quem chama decide o que fazer com o banco depois.
+     */
+    private fun openScannedLocalSource(sourceId: String, absolutePath: String): Source? {
+        val loaded = WorkspaceScanner.scanLocal(sourceId, absolutePath) ?: return null
 
         val isExistingGitCheckout = isGitRepository(File(absolutePath))
         val source = if (isExistingGitCheckout) loaded.source.copy(type = SourceType.GIT) else loaded.source
@@ -112,8 +196,130 @@ class AppState {
             GitClient.readStatus(File(absolutePath))?.let { gitStatuses[sourceId] = it }
         }
 
+        return source
+    }
+
+    /**
+     * Registra/atualiza a wiki no banco em segundo plano ([persistenceScope])
+     * — a fonte já está visível na sidebar antes disso terminar, então o
+     * registro em si nunca atrasa a UI. Guarda o id resultante em
+     * [wikiIdsBySourceId] para uso por [removeSource]/snapshots de Git.
+     */
+    private fun persistWikiRegistration(
+        sourceId: String,
+        name: String,
+        rootPath: String,
+        sourceType: WikiSourceType,
+        remoteUrl: String?
+    ) {
+        persistenceScope.launch {
+            runCatching {
+                val wiki = persistence.wikiRepository.register(
+                    name = name,
+                    rootPath = rootPath,
+                    sourceType = sourceType,
+                    remoteUrl = remoteUrl
+                )
+                wikiIdsBySourceId[sourceId] = wiki.id
+                persistence.wikiRepository.markOpened(wiki.id)
+                persistence.settingsRepository.updateLastOpenedWiki(wiki.id)
+
+                if (isGitRepository(File(rootPath))) {
+                    persistGitSnapshot(sourceId, wiki.id)
+                }
+            }.onFailure { e -> PersistenceLog.warn("Falha ao registrar a wiki '$name' no banco", e) }
+        }
+    }
+
+    /** Salva o `GitSourceStatus` em memória de [sourceId] (já lido/atualizado) como snapshot persistido da wiki [wikiId]. Não faz nada se não houver status conhecido ainda. */
+    private suspend fun persistGitSnapshot(sourceId: String, wikiId: Long) {
+        val status = gitStatuses[sourceId] ?: return
+        runCatching {
+            persistence.gitStateRepository.saveSnapshot(
+                WikiGitState(
+                    wikiId = wikiId,
+                    currentBranch = status.branch,
+                    headCommit = status.commitHash,
+                    remoteHeadCommit = null,
+                    hasLocalChanges = status.changedFiles.isNotEmpty(),
+                    aheadCount = status.aheadCount,
+                    behindCount = status.behindCount,
+                    lastFetchAt = System.currentTimeMillis(),
+                    lastScanAt = System.currentTimeMillis()
+                )
+            )
+        }.onFailure { e -> PersistenceLog.warn("Falha ao salvar snapshot Git da wiki id=$wikiId", e) }
+    }
+
+    /**
+     * Chamada uma única vez, pelo `LaunchedEffect(Unit)` de `AppRoot`, ao
+     * iniciar o app: carrega preferências, aplica tema/largura da sidebar,
+     * restaura as wikis ativas verificando se cada caminho ainda existe, e
+     * foca a última wiki aberta quando possível. Se nenhuma wiki persistida
+     * puder ser reaberta, cai no mesmo atalho de desenvolvimento que já
+     * existia antes da persistência (abrir `test-wiki/` quando presente no
+     * diretório de trabalho).
+     *
+     * Nunca lança: uma falha em qualquer parte do carregamento é logada e a
+     * tela inicial (seleção de pasta) continua acessível normalmente — ver
+     * `sourceError`.
+     */
+    suspend fun bootstrap() {
+        runCatching { bootstrapInternal() }
+            .onFailure { e ->
+                PersistenceLog.error("Falha ao restaurar wikis/preferências salvas — iniciando com estado vazio.", e)
+                sourceError = "Não foi possível carregar as preferências salvas. Selecione uma pasta para começar."
+            }
+    }
+
+    private suspend fun bootstrapInternal() {
+        val settings = persistence.settingsRepository.loadSettings()
+        currentTheme = settings.theme
+        isDarkTheme = settings.theme == AppTheme.DARK
+        sidebarWidthDp = settings.sidebarWidth.toFloat()
+
+        val activeWikis = persistence.wikiRepository.listActiveWikis()
+        var lastOpenedSourceId: String? = null
+
+        for (wiki in activeWikis) {
+            if (!File(wiki.rootPath).isDirectory) {
+                unavailableWikiNames.add(wiki.name)
+                PersistenceLog.warn("Wiki '${wiki.name}' (id=${wiki.id}) está registrada, mas o caminho salvo não existe mais.")
+                continue
+            }
+
+            val sourceId = when (wiki.sourceType) {
+                WikiSourceType.GIT_REPOSITORY -> "git:${wiki.rootPath}"
+                WikiSourceType.LOCAL_FOLDER -> "local:${wiki.rootPath}"
+            }
+            if (sources.any { it.id == sourceId }) continue
+
+            openScannedLocalSource(sourceId, wiki.rootPath) ?: continue
+            wikiIdsBySourceId[sourceId] = wiki.id
+
+            if (wiki.id == settings.lastOpenedWikiId) {
+                lastOpenedSourceId = sourceId
+            }
+        }
+
         if (activeTabId.isEmpty()) {
-            source.initialDocumentId?.let { activateTab(it) }
+            val focusSource = lastOpenedSourceId?.let { id -> sources.firstOrNull { it.id == id } } ?: sources.firstOrNull()
+            focusSource?.initialDocumentId?.let { activateTab(it) }
+        }
+
+        // Nenhuma wiki persistida pôde ser reaberta — mesma conveniência de
+        // desenvolvimento que existia antes da persistência local.
+        if (sources.isEmpty() && sourceError == null) {
+            val devWiki = File("test-wiki")
+            if (devWiki.isDirectory) {
+                addLocalSource(devWiki.absolutePath)
+            }
+        }
+
+        if (sources.isEmpty() && unavailableWikiNames.isNotEmpty()) {
+            sourceError = "As seguintes wikis não foram encontradas nos caminhos salvos: " +
+                unavailableWikiNames.joinToString(", ") +
+                ". Selecione uma pasta para adicioná-la novamente."
         }
     }
 
@@ -136,6 +342,16 @@ class AppState {
         gitRemotes.remove(sourceId)
         gitStatuses.remove(sourceId)
         collapsedSources.remove(sourceId)
+
+        // Remoção lógica no banco: os arquivos no disco e os metadados da
+        // wiki continuam intactos — só deixa de ser reaberta automaticamente
+        // no próximo startup (ver `bootstrap`/`WikiRepository.softDelete`).
+        wikiIdsBySourceId.remove(sourceId)?.let { wikiId ->
+            persistenceScope.launch {
+                runCatching { persistence.wikiRepository.softDelete(wikiId) }
+                    .onFailure { e -> PersistenceLog.warn("Falha ao remover logicamente a wiki id=$wikiId", e) }
+            }
+        }
     }
 
     /**
@@ -225,6 +441,29 @@ class AppState {
                     gitRemotes[sourceId] = GitRemoteInfo(remoteUrl, branch, result.localPath, credentials)
                     refreshGitStatus(sourceId, result.localPath)
 
+                    // Em persistenceScope (não no `scope` recebido, que é o
+                    // CoroutineScope da composição do modal "Adicionar fonte")
+                    // pelo mesmo motivo de `persistWikiRegistration`: `scope`
+                    // é cancelado quando a composição sai (ex.: janela
+                    // fechada logo após o clone terminar), o que cortaria
+                    // esta escrita antes de `AppState.dispose()` ter chance
+                    // de esperar por ela.
+                    persistenceScope.launch {
+                        runCatching {
+                            val wiki = persistence.wikiRepository.register(
+                                name = gitSource.name,
+                                rootPath = result.localPath,
+                                sourceType = WikiSourceType.GIT_REPOSITORY,
+                                remoteUrl = remoteUrl,
+                                defaultBranch = branch
+                            )
+                            wikiIdsBySourceId[sourceId] = wiki.id
+                            persistence.wikiRepository.markOpened(wiki.id)
+                            persistence.settingsRepository.updateLastOpenedWiki(wiki.id)
+                            persistGitSnapshot(sourceId, wiki.id)
+                        }.onFailure { e -> PersistenceLog.warn("Falha ao registrar a wiki Git '${gitSource.name}' no banco", e) }
+                    }
+
                     if (activeTabId.isEmpty()) {
                         gitSource.initialDocumentId?.let { activateTab(it) }
                     }
@@ -276,6 +515,12 @@ class AppState {
             // working tree local, que independe do pull ter tido sucesso.
             refreshGitStatus(sourceId, info.localPath)
 
+            // persistenceScope, não `scope` — mesmo motivo de addGitSource:
+            // não fica preso ao ciclo de vida da composição/janela.
+            wikiIdsBySourceId[sourceId]?.let { wikiId ->
+                persistenceScope.launch { persistGitSnapshot(sourceId, wikiId) }
+            }
+
             gitRefreshingSourceId = null
         }
     }
@@ -287,11 +532,29 @@ class AppState {
         .takeIf { compositeId.contains("::") }
 
     // --- Tema -------------------------------------------------------------
+    /**
+     * Preferência persistida (`SYSTEM`, `LIGHT` ou `DARK`). [toggleTheme]
+     * continua sendo um botão de dois estados na UI (mesmo comportamento
+     * visual de sempre) — alterna entre `LIGHT`/`DARK` e persiste o
+     * resultado; a UI não tem hoje um seletor de três posições.
+     *
+     * `SYSTEM` resolve para claro (`isDarkTheme = false`) ao carregar: a JVM
+     * não tem uma API multiplataforma confiável para detectar o tema atual
+     * do SO sem bindings nativos adicionais — ver limitações no relatório de
+     * entrega da persistência.
+     */
+    private var currentTheme: AppTheme = AppTheme.LIGHT
+
     var isDarkTheme by mutableStateOf(false)
         private set
 
     fun toggleTheme() {
-        isDarkTheme = !isDarkTheme
+        currentTheme = if (currentTheme == AppTheme.DARK) AppTheme.LIGHT else AppTheme.DARK
+        isDarkTheme = currentTheme == AppTheme.DARK
+        persistenceScope.launch {
+            runCatching { persistence.settingsRepository.updateTheme(currentTheme) }
+                .onFailure { e -> PersistenceLog.warn("Falha ao salvar preferência de tema", e) }
+        }
     }
 
     // --- Sidebar ------------------------------------------------------------
@@ -300,12 +563,24 @@ class AppState {
     var sidebarCollapsed by mutableStateOf(false)
         private set
 
+    private var sidebarPersistJob: Job? = null
+
     fun toggleSidebar() {
         sidebarCollapsed = !sidebarCollapsed
     }
 
     fun resizeSidebar(deltaPx: Float) {
         sidebarWidthDp = (sidebarWidthDp + deltaPx).coerceIn(220f, 420f)
+
+        // Arrastar a borda da sidebar chama isto várias vezes por segundo —
+        // debounce simples para não gravar no banco a cada pixel, só depois
+        // que o usuário parar de arrastar por um instante.
+        sidebarPersistJob?.cancel()
+        sidebarPersistJob = persistenceScope.launch {
+            delay(300)
+            runCatching { persistence.settingsRepository.updateSidebarWidth(sidebarWidthDp.roundToInt()) }
+                .onFailure { e -> PersistenceLog.warn("Falha ao salvar largura da sidebar", e) }
+        }
     }
 
     val expandedFolders = mutableStateMapOf<String, Boolean>()
