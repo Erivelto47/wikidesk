@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.erivelto.wikidesk"
-version = "1.1.0"
+version = "1.2.0"
 
 repositories {
     google()

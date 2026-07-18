@@ -56,3 +56,6 @@ jobs:
         with:
           files: ${{ matrix.artifact }}
           generate_release_notes: true
+          # Tags com hífen (ex. v1.2.0-beta.1) são pré-releases — não aparecem
+          # como "Latest" e ficam marcadas como teste no GitHub.
+          prerelease: ${{ contains(github.ref_name, '-') }}
