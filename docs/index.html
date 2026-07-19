@@ -748,7 +748,7 @@
               <span class="platform-badge">DMG</span>
             </div>
             <p>Instalador para computadores Mac. Na primeira abertura, talvez seja necessário liberar o app nos ajustes de segurança.</p>
-            <a class="download-link primary" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/WikiDesk-1.2.0.dmg">Baixar .dmg</a>
+            <a id="download-dmg" class="download-link primary" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/WikiDesk-1.2.0.dmg">Baixar .dmg</a>
           </article>
 
           <article class="download-card">
@@ -757,7 +757,7 @@
               <span class="platform-badge">MSI</span>
             </div>
             <p>Pacote de instalação para Windows. Caso o SmartScreen apareça, use a opção de mais informações para continuar.</p>
-            <a class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/WikiDesk-1.2.0.msi">Baixar .msi</a>
+            <a id="download-msi" class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/WikiDesk-1.2.0.msi">Baixar .msi</a>
           </article>
 
           <article class="download-card">
@@ -766,7 +766,7 @@
               <span class="platform-badge">DEB</span>
             </div>
             <p>Pacote Debian/Ubuntu para ambientes Linux compatíveis com arquivos <code>.deb</code>.</p>
-            <a class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/wikidesk_1.2.0_amd64.deb">Baixar .deb</a>
+            <a id="download-deb" class="download-link" href="https://github.com/Erivelto47/wikidesk/releases/download/v1.2.0/wikidesk_1.2.0_amd64.deb">Baixar .deb</a>
           </article>
         </div>
 
@@ -918,13 +918,69 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <span>WikiDesk 1.2.0 - MIT License</span>
+      <span id="footer-version">WikiDesk 1.2.0 - MIT License</span>
       <div class="footer-links">
         <a href="https://github.com/Erivelto47/wikidesk" rel="noopener">GitHub</a>
-        <a href="https://github.com/Erivelto47/wikidesk/releases/tag/v1.2.0" rel="noopener">Release v1.2.0</a>
+        <a id="footer-release-link" href="https://github.com/Erivelto47/wikidesk/releases/tag/v1.2.0" rel="noopener">Release v1.2.0</a>
         <a href="https://github.com/Erivelto47/wikidesk/issues" rel="noopener">Issues</a>
       </div>
     </div>
   </footer>
+
+  <script>
+    // Busca a última release estável (não-draft, não-prerelease) direto na API
+    // do GitHub e atualiza título, links de download e rodapé. Se a busca
+    // falhar (offline, rate limit etc.), a página fica com os valores
+    // estáticos acima como fallback — nunca quebra, só pode ficar desatualizada.
+    (function () {
+      var REPO = "Erivelto47/wikidesk";
+
+      fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (release) {
+          var tag = release.tag_name; // ex: "v1.2.0"
+          var version = tag.replace(/^v/, "");
+          var assets = release.assets || [];
+
+          function assetUrl(pattern) {
+            var asset = assets.find(function (a) {
+              return pattern.test(a.name);
+            });
+            return asset ? asset.browser_download_url : null;
+          }
+
+          var dmgUrl = assetUrl(/\.dmg$/i);
+          var msiUrl = assetUrl(/\.msi$/i);
+          var debUrl = assetUrl(/\.deb$/i);
+
+          var titleEl = document.getElementById("download-title");
+          if (titleEl) titleEl.textContent = "Baixe a versão " + version;
+
+          var dmgEl = document.getElementById("download-dmg");
+          if (dmgEl && dmgUrl) dmgEl.href = dmgUrl;
+
+          var msiEl = document.getElementById("download-msi");
+          if (msiEl && msiUrl) msiEl.href = msiUrl;
+
+          var debEl = document.getElementById("download-deb");
+          if (debEl && debUrl) debEl.href = debUrl;
+
+          var footerVersionEl = document.getElementById("footer-version");
+          if (footerVersionEl) footerVersionEl.textContent = "WikiDesk " + version + " - MIT License";
+
+          var footerReleaseEl = document.getElementById("footer-release-link");
+          if (footerReleaseEl) {
+            footerReleaseEl.href = release.html_url || ("https://github.com/" + REPO + "/releases/tag/" + tag);
+            footerReleaseEl.textContent = "Release " + tag;
+          }
+        })
+        .catch(function () {
+          // Sem sorte — mantém o conteúdo estático já renderizado no HTML.
+        });
+    })();
+  </script>
 </body>
 </html>
